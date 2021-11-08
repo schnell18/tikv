@@ -1,0 +1,93 @@
+# This Docker image contains a minimal build environment for TiKV based alpine
+#
+# It contains all the tools necessary to reproduce official production builds of TiKV
+
+# To avoid rebuilds we first install all Cargo dependencies
+
+
+# The prepare image avoid ruining the cache of the builder
+FROM rust:1.56-alpine3.14 as prepare
+MAINTAINER Justin Zhang schnell18@gmail.com
+
+WORKDIR /tikv
+
+# This step will always ruin the cache
+# There isn't a way with docker to wildcard COPY and preserve the directory structure
+COPY . .
+RUN mkdir /output
+RUN for component in $(find . -type f -name 'Cargo.toml' -exec dirname {} \; | sort -u); do \
+     mkdir -p "/output/${component}/src" \
+  && touch "/output/${component}/src/lib.rs" \
+  && cp "${component}/Cargo.toml" "/output/${component}/Cargo.toml" \
+  ; done
+
+
+FROM rust:1.56-alpine3.14 as builder
+MAINTAINER Justin Zhang schnell18@gmail.com
+
+# ENV RUSTUP_DIST_SERVER https://mirrors.tuna.tsinghua.edu.cn/rustup
+#ARG APK_MIRROR="mirrors.tuna.tsinghua.edu.cn"
+# switch to local mirror
+#RUN sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories
+
+RUN apk add --no-cache perl cmake make bash git g++ && \
+    apk add --no-cache musl-dev --repository https://www.tinkerit.cf/apks/edge/main --allow-untrusted
+
+WORKDIR /tikv
+
+# Install the Rust toolchain
+RUN rustup self update \
+  && rustup set profile minimal \
+  && rustup default stable
+
+# For cargo
+COPY scripts ./scripts
+COPY etc ./etc
+COPY Cargo.lock ./Cargo.lock
+
+COPY --from=prepare /output/ ./
+
+RUN mkdir -p ./cmd/tikv-ctl/src ./cmd/tikv-server/src && \
+    echo 'fn main() {}' > ./cmd/tikv-ctl/src/main.rs && \
+    echo 'fn main() {}' > ./cmd/tikv-server/src/main.rs && \
+    for cargotoml in $(find . -type f -name "Cargo.toml"); do \
+        sed -i '/fuzz/d' ${cargotoml} && \
+        sed -i '/profiler/d' ${cargotoml} ; \
+    done
+
+COPY Makefile ./
+ENV CARGO_NET_GIT_FETCH_WITH_CLI true
+RUN make build_dist_release
+
+# Remove fingerprints for when we build the real binaries.
+RUN rm -rf ./target/release/.fingerprint/tikv-* && \
+  for i in $(find . -type f -name 'Cargo.toml' -exec dirname {} \; | sort -u); do \
+    rm -rf ./target/release/.fingerprint/$(basename ${i})-*; \
+  done
+
+# Add full source code
+COPY cmd/ ./cmd/
+COPY components/ ./components/
+COPY src/ ./src/
+
+# Build real binaries now
+ARG GIT_FALLBACK="Unknown (no git or not git repo)"
+ARG GIT_HASH=${GIT_FALLBACK}
+ARG GIT_TAG=${GIT_FALLBACK}
+ARG GIT_BRANCH=${GIT_FALLBACK}
+ENV TIKV_BUILD_GIT_HASH=${GIT_HASH}
+ENV TIKV_BUILD_GIT_TAG=${GIT_TAG}
+ENV TIKV_BUILD_GIT_BRANCH=${GIT_BRANCH}
+RUN make build_dist_release
+
+# Export to a clean image
+# FROM pingcap/alpine-glibc
+FROM alpine:3.14
+
+MAINTAINER Justin Zhang schnell18@gmail.com
+COPY --from=builder /tikv/target/release/tikv-server /tikv-server
+COPY --from=builder /tikv/target/release/tikv-ctl /tikv-ctl
+
+EXPOSE 20160 20180
+
+ENTRYPOINT ["/tikv-server"]

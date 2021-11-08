@@ -1,0 +1,56 @@
+# This Docker image contains a minimal build environment for TiKV based alpine
+#
+# It contains all the tools necessary to reproduce official production builds of TiKV
+
+# To avoid rebuilds we first install all Cargo dependencies
+
+
+# The prepare image avoid ruining the cache of the builder
+FROM rust:1.56-alpine3.14 as prepare
+MAINTAINER Justin Zhang schnell18@gmail.com
+
+WORKDIR /tikv
+
+# This step will always ruin the cache
+# There isn't a way with docker to wildcard COPY and preserve the directory structure
+COPY . .
+RUN mkdir /output
+RUN for component in $(find . -type f -name 'Cargo.toml' -exec dirname {} \; | sort -u); do \
+     mkdir -p "/output/${component}/src" \
+  && touch "/output/${component}/src/lib.rs" \
+  && cp "${component}/Cargo.toml" "/output/${component}/Cargo.toml" \
+  ; done
+
+
+FROM rust:1.56-alpine3.14
+MAINTAINER Justin Zhang schnell18@gmail.com
+
+#ENV RUSTUP_DIST_SERVER https://mirrors.tuna.tsinghua.edu.cn/rustup
+ARG APK_MIRROR="mirrors.tuna.tsinghua.edu.cn"
+# switch to local mirror
+RUN sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories
+
+RUN apk add --no-cache perl cmake make bash git
+
+# Install the Rust toolchain
+WORKDIR /tikv
+
+RUN rustup set profile minimal \
+  && rustup default stable
+
+# For cargo
+COPY scripts ./scripts
+COPY etc ./etc
+COPY Cargo.lock ./Cargo.lock
+
+COPY --from=prepare /output/ ./
+
+RUN mkdir -p ./cmd/src/bin && \
+    echo 'fn main() {}' > ./cmd/src/bin/tikv-ctl.rs && \
+    echo 'fn main() {}' > ./cmd/src/bin/tikv-server.rs && \
+    for cargotoml in $(find . -type f -name "Cargo.toml"); do \
+        sed -i '/fuzz/d' ${cargotoml} && \
+        sed -i '/profiler/d' ${cargotoml} ; \
+    done
+
+COPY Makefile ./
