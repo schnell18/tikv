@@ -106,3 +106,4 @@ required-features = ["failpoints"]
 name = "cdc_event"
 harness = false
 required-features = ["protobuf-codec"]
+path = "benches/cdc_event/main.rs"
