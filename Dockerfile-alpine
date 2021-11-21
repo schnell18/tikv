@@ -26,11 +26,12 @@ FROM rust:1.56-alpine3.14 as builder
 MAINTAINER Justin Zhang schnell18@gmail.com
 
 # ENV RUSTUP_DIST_SERVER https://mirrors.tuna.tsinghua.edu.cn/rustup
-ARG APK_MIRROR="mirrors.tuna.tsinghua.edu.cn"
+#ARG APK_MIRROR="mirrors.tuna.tsinghua.edu.cn"
 # switch to local mirror
-RUN sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories
+#RUN sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories
 
-RUN apk add --no-cache perl cmake make bash git musl-dev
+RUN apk add --no-cache perl cmake make bash git g++ && \
+    apk add --no-cache musl-dev --repository https://www.tinkerit.cf/apks/edge/main --allow-untrusted
 
 WORKDIR /tikv
 

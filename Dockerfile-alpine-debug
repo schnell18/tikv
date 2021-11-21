@@ -35,8 +35,7 @@ RUN apk add --no-cache perl cmake make bash git
 # Install the Rust toolchain
 WORKDIR /tikv
 
-RUN rustup self update \
-  && rustup set profile minimal \
+RUN rustup set profile minimal \
   && rustup default stable
 
 # For cargo
