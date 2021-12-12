@@ -1,29 +1,9 @@
-# This Docker image contains a minimal build environment for TiKV based alpine
-#
-# It contains all the tools necessary to reproduce official production builds of TiKV
-
-# To avoid rebuilds we first install all Cargo dependencies
-
-
-# The prepare image avoid ruining the cache of the builder
-FROM rust:1.57-slim-bullseye as prepare
-MAINTAINER Justin Zhang schnell18@gmail.com
-
-WORKDIR /tikv
-
-# This step will always ruin the cache
-# There isn't a way with docker to wildcard COPY and preserve the directory structure
-COPY . .
-RUN mkdir /output
-RUN for component in $(find . -type f -name 'Cargo.toml' -exec dirname {} \; | sort -u); do \
-     mkdir -p "/output/${component}/src" \
-  && touch "/output/${component}/src/lib.rs" \
-  && cp "${component}/Cargo.toml" "/output/${component}/Cargo.toml" \
-  ; done
-
+# This Docker image contains a minimal build environment for TiKV based
+# debian-slim. It contains all the tools necessary to reproduce official
+# production builds of TiKV.
 
 FROM rust:1.57-slim-bullseye as builder
-MAINTAINER Justin Zhang schnell18@gmail.com
+LABEL MAINTAINER Justin Zhang schnell18@gmail.com
 
 # switch to local mirror
 ADD debian-mirror.ustc.list /etc/apt/sources.list
@@ -44,49 +24,125 @@ RUN apt-get update && apt install -y\
     bash \
     git \
     linux-headers-generic
+ENV LIBRARY_PATH /usr/local/lib:$LIBRARY_PATH
+ENV LD_LIBRARY_PATH /usr/local/lib:$LD_LIBRARY_PATH
 
 WORKDIR /tikv
-
-# Install the Rust toolchain
-RUN rustup self update \
-  && rustup set profile minimal \
-  && rustup default nightly
-
-# For cargo
+COPY rust-toolchain ./
+RUN rustup self update
+RUN rustup set profile minimal
+RUN rustup default $(cat "rust-toolchain")
 COPY scripts ./scripts
 COPY etc ./etc
 COPY Cargo.lock ./Cargo.lock
-
-COPY --from=prepare /output/ ./
-
-RUN mkdir -p ./cmd/tikv-ctl/src ./cmd/tikv-server/src && \
-    echo 'fn main() {}' > ./cmd/tikv-ctl/src/main.rs && \
-    echo 'fn main() {}' > ./cmd/tikv-server/src/main.rs && \
-    for cargotoml in $(find . -type f -name "Cargo.toml"); do \
+RUN mkdir -p ./src ./cmd/src ./components/backup/src ./components/batch-system/src ./components/cdc/src ./components/codec/src ./components/configuration/src ./components/configuration/configuration_derive/src ./components/encryption/src ./components/engine/src ./components/engine_panic/src ./components/engine_rocks/src ./components/engine_traits/src ./components/error_code/src ./components/external_storage/src ./components/into_other/src ./components/keys/src ./components/log_wrappers/src ./components/match_template/src ./components/panic_hook/src ./components/pd_client/src ./components/profiler/src ./components/raftstore/src ./components/resolved_ts/src ./components/rusoto_util/src ./components/security/src ./components/sst_importer/src ./components/test_coprocessor/src ./components/test_pd/src ./components/test_raftstore/src ./components/test_sst_importer/src ./components/test_storage/src ./components/test_util/src ./components/tidb_query/src ./components/tidb_query_codegen/src ./components/tidb_query_datatype/src ./components/tikv_alloc/src ./components/tikv_util/src ./components/tipb_helper/src ./components/txn_types/src ./fuzz/src ./fuzz/fuzzer-afl/src ./fuzz/fuzzer-honggfuzz/src ./fuzz/fuzzer-libfuzzer/src ./fuzz/targets/src ./tests/src && touch ./src/lib.rs ./cmd/src/lib.rs ./components/backup/src/lib.rs ./components/batch-system/src/lib.rs ./components/cdc/src/lib.rs ./components/codec/src/lib.rs ./components/configuration/src/lib.rs ./components/configuration/configuration_derive/src/lib.rs ./components/encryption/src/lib.rs ./components/engine/src/lib.rs ./components/engine_panic/src/lib.rs ./components/engine_rocks/src/lib.rs ./components/engine_traits/src/lib.rs ./components/error_code/src/lib.rs ./components/external_storage/src/lib.rs ./components/into_other/src/lib.rs ./components/keys/src/lib.rs ./components/log_wrappers/src/lib.rs ./components/match_template/src/lib.rs ./components/panic_hook/src/lib.rs ./components/pd_client/src/lib.rs ./components/profiler/src/lib.rs ./components/raftstore/src/lib.rs ./components/resolved_ts/src/lib.rs ./components/rusoto_util/src/lib.rs ./components/security/src/lib.rs ./components/sst_importer/src/lib.rs ./components/test_coprocessor/src/lib.rs ./components/test_pd/src/lib.rs ./components/test_raftstore/src/lib.rs ./components/test_sst_importer/src/lib.rs ./components/test_storage/src/lib.rs ./components/test_util/src/lib.rs ./components/tidb_query/src/lib.rs ./components/tidb_query_codegen/src/lib.rs ./components/tidb_query_datatype/src/lib.rs ./components/tikv_alloc/src/lib.rs ./components/tikv_util/src/lib.rs ./components/tipb_helper/src/lib.rs ./components/txn_types/src/lib.rs ./fuzz/src/lib.rs ./fuzz/fuzzer-afl/src/lib.rs ./fuzz/fuzzer-honggfuzz/src/lib.rs ./fuzz/fuzzer-libfuzzer/src/lib.rs ./fuzz/targets/src/lib.rs ./tests/src/lib.rs
+COPY ./Cargo.toml ./Cargo.toml
+COPY ./cmd/Cargo.toml ./cmd/Cargo.toml
+COPY ./components/backup/Cargo.toml ./components/backup/Cargo.toml
+COPY ./components/batch-system/Cargo.toml ./components/batch-system/Cargo.toml
+COPY ./components/cdc/Cargo.toml ./components/cdc/Cargo.toml
+COPY ./components/codec/Cargo.toml ./components/codec/Cargo.toml
+COPY ./components/configuration/Cargo.toml ./components/configuration/Cargo.toml
+COPY ./components/configuration/configuration_derive/Cargo.toml ./components/configuration/configuration_derive/Cargo.toml
+COPY ./components/encryption/Cargo.toml ./components/encryption/Cargo.toml
+COPY ./components/engine/Cargo.toml ./components/engine/Cargo.toml
+COPY ./components/engine_panic/Cargo.toml ./components/engine_panic/Cargo.toml
+COPY ./components/engine_rocks/Cargo.toml ./components/engine_rocks/Cargo.toml
+COPY ./components/engine_traits/Cargo.toml ./components/engine_traits/Cargo.toml
+COPY ./components/error_code/Cargo.toml ./components/error_code/Cargo.toml
+COPY ./components/external_storage/Cargo.toml ./components/external_storage/Cargo.toml
+COPY ./components/into_other/Cargo.toml ./components/into_other/Cargo.toml
+COPY ./components/keys/Cargo.toml ./components/keys/Cargo.toml
+COPY ./components/log_wrappers/Cargo.toml ./components/log_wrappers/Cargo.toml
+COPY ./components/match_template/Cargo.toml ./components/match_template/Cargo.toml
+COPY ./components/panic_hook/Cargo.toml ./components/panic_hook/Cargo.toml
+COPY ./components/pd_client/Cargo.toml ./components/pd_client/Cargo.toml
+COPY ./components/profiler/Cargo.toml ./components/profiler/Cargo.toml
+COPY ./components/raftstore/Cargo.toml ./components/raftstore/Cargo.toml
+COPY ./components/resolved_ts/Cargo.toml ./components/resolved_ts/Cargo.toml
+COPY ./components/rusoto_util/Cargo.toml ./components/rusoto_util/Cargo.toml
+COPY ./components/security/Cargo.toml ./components/security/Cargo.toml
+COPY ./components/sst_importer/Cargo.toml ./components/sst_importer/Cargo.toml
+COPY ./components/test_coprocessor/Cargo.toml ./components/test_coprocessor/Cargo.toml
+COPY ./components/test_pd/Cargo.toml ./components/test_pd/Cargo.toml
+COPY ./components/test_raftstore/Cargo.toml ./components/test_raftstore/Cargo.toml
+COPY ./components/test_sst_importer/Cargo.toml ./components/test_sst_importer/Cargo.toml
+COPY ./components/test_storage/Cargo.toml ./components/test_storage/Cargo.toml
+COPY ./components/test_util/Cargo.toml ./components/test_util/Cargo.toml
+COPY ./components/tidb_query/Cargo.toml ./components/tidb_query/Cargo.toml
+COPY ./components/tidb_query_codegen/Cargo.toml ./components/tidb_query_codegen/Cargo.toml
+COPY ./components/tidb_query_datatype/Cargo.toml ./components/tidb_query_datatype/Cargo.toml
+COPY ./components/tikv_alloc/Cargo.toml ./components/tikv_alloc/Cargo.toml
+COPY ./components/tikv_util/Cargo.toml ./components/tikv_util/Cargo.toml
+COPY ./components/tipb_helper/Cargo.toml ./components/tipb_helper/Cargo.toml
+COPY ./components/txn_types/Cargo.toml ./components/txn_types/Cargo.toml
+COPY ./fuzz/Cargo.toml ./fuzz/Cargo.toml
+COPY ./fuzz/fuzzer-afl/Cargo.toml ./fuzz/fuzzer-afl/Cargo.toml
+COPY ./fuzz/fuzzer-honggfuzz/Cargo.toml ./fuzz/fuzzer-honggfuzz/Cargo.toml
+COPY ./fuzz/fuzzer-libfuzzer/Cargo.toml ./fuzz/fuzzer-libfuzzer/Cargo.toml
+COPY ./fuzz/targets/Cargo.toml ./fuzz/targets/Cargo.toml
+COPY ./tests/Cargo.toml ./tests/Cargo.toml
+RUN mkdir -p ./cmd/src/bin && \
+    echo 'fn main() {}' > ./cmd/src/bin/tikv-ctl.rs && \
+    echo 'fn main() {}' > ./cmd/src/bin/tikv-server.rs && \
+    for cargotoml in $(find . -name "Cargo.toml"); do \
         sed -i '/fuzz/d' ${cargotoml} && \
         sed -i '/profiler/d' ${cargotoml} ; \
     done
 
 COPY Makefile ./
-ENV CARGO_NET_GIT_FETCH_WITH_CLI true
 RUN make build_dist_release
-
-# Remove fingerprints for when we build the real binaries.
-RUN rm -rf ./target/release/.fingerprint/tikv-* && \
-  for i in $(find . -type f -name 'Cargo.toml' -exec dirname {} \; | sort -u); do \
-    rm -rf ./target/release/.fingerprint/$(basename ${i})-*; \
-  done
-
-# Add full source code
-COPY cmd/ ./cmd/
-COPY components/ ./components/
-COPY src/ ./src/
-
-# Build real binaries now
-ARG GIT_FALLBACK="Unknown (no git or not git repo)"
-ARG GIT_HASH=${GIT_FALLBACK}
-ARG GIT_TAG=${GIT_FALLBACK}
-ARG GIT_BRANCH=${GIT_FALLBACK}
+RUN rm -rf ./target/release/.fingerprint/.-* ./target/release/.fingerprint/cmd-* ./target/release/.fingerprint/backup-* ./target/release/.fingerprint/batch-system-* ./target/release/.fingerprint/cdc-* ./target/release/.fingerprint/codec-* ./target/release/.fingerprint/configuration-* ./target/release/.fingerprint/configuration_derive-* ./target/release/.fingerprint/encryption-* ./target/release/.fingerprint/engine-* ./target/release/.fingerprint/engine_panic-* ./target/release/.fingerprint/engine_rocks-* ./target/release/.fingerprint/engine_traits-* ./target/release/.fingerprint/error_code-* ./target/release/.fingerprint/external_storage-* ./target/release/.fingerprint/into_other-* ./target/release/.fingerprint/keys-* ./target/release/.fingerprint/log_wrappers-* ./target/release/.fingerprint/match_template-* ./target/release/.fingerprint/panic_hook-* ./target/release/.fingerprint/pd_client-* ./target/release/.fingerprint/profiler-* ./target/release/.fingerprint/raftstore-* ./target/release/.fingerprint/resolved_ts-* ./target/release/.fingerprint/rusoto_util-* ./target/release/.fingerprint/security-* ./target/release/.fingerprint/sst_importer-* ./target/release/.fingerprint/test_coprocessor-* ./target/release/.fingerprint/test_pd-* ./target/release/.fingerprint/test_raftstore-* ./target/release/.fingerprint/test_sst_importer-* ./target/release/.fingerprint/test_storage-* ./target/release/.fingerprint/test_util-* ./target/release/.fingerprint/tidb_query-* ./target/release/.fingerprint/tidb_query_codegen-* ./target/release/.fingerprint/tidb_query_datatype-* ./target/release/.fingerprint/tikv_alloc-* ./target/release/.fingerprint/tikv_util-* ./target/release/.fingerprint/tipb_helper-* ./target/release/.fingerprint/txn_types-* ./target/release/.fingerprint/fuzz-* ./target/release/.fingerprint/fuzzer-afl-* ./target/release/.fingerprint/fuzzer-honggfuzz-* ./target/release/.fingerprint/fuzzer-libfuzzer-* ./target/release/.fingerprint/targets-* ./target/release/.fingerprint/tests-* ./target/release/.fingerprint/tikv-*
+COPY ./cmd ./cmd
+COPY ./components/backup ./components/backup
+COPY ./components/batch-system ./components/batch-system
+COPY ./components/cdc ./components/cdc
+COPY ./components/codec ./components/codec
+COPY ./components/configuration ./components/configuration
+COPY ./components/configuration/configuration_derive ./components/configuration/configuration_derive
+COPY ./components/encryption ./components/encryption
+COPY ./components/engine ./components/engine
+COPY ./components/engine_panic ./components/engine_panic
+COPY ./components/engine_rocks ./components/engine_rocks
+COPY ./components/engine_traits ./components/engine_traits
+COPY ./components/error_code ./components/error_code
+COPY ./components/external_storage ./components/external_storage
+COPY ./components/into_other ./components/into_other
+COPY ./components/keys ./components/keys
+COPY ./components/log_wrappers ./components/log_wrappers
+COPY ./components/match_template ./components/match_template
+COPY ./components/panic_hook ./components/panic_hook
+COPY ./components/pd_client ./components/pd_client
+COPY ./components/profiler ./components/profiler
+COPY ./components/raftstore ./components/raftstore
+COPY ./components/resolved_ts ./components/resolved_ts
+COPY ./components/rusoto_util ./components/rusoto_util
+COPY ./components/security ./components/security
+COPY ./components/sst_importer ./components/sst_importer
+COPY ./components/test_coprocessor ./components/test_coprocessor
+COPY ./components/test_pd ./components/test_pd
+COPY ./components/test_raftstore ./components/test_raftstore
+COPY ./components/test_sst_importer ./components/test_sst_importer
+COPY ./components/test_storage ./components/test_storage
+COPY ./components/test_util ./components/test_util
+COPY ./components/tidb_query ./components/tidb_query
+COPY ./components/tidb_query_codegen ./components/tidb_query_codegen
+COPY ./components/tidb_query_datatype ./components/tidb_query_datatype
+COPY ./components/tikv_alloc ./components/tikv_alloc
+COPY ./components/tikv_util ./components/tikv_util
+COPY ./components/tipb_helper ./components/tipb_helper
+COPY ./components/txn_types ./components/txn_types
+COPY ./fuzz ./fuzz
+COPY ./fuzz/fuzzer-afl ./fuzz/fuzzer-afl
+COPY ./fuzz/fuzzer-honggfuzz ./fuzz/fuzzer-honggfuzz
+COPY ./fuzz/fuzzer-libfuzzer ./fuzz/fuzzer-libfuzzer
+COPY ./fuzz/targets ./fuzz/targets
+COPY ./tests ./tests
+COPY src src
+ARG GIT_FULLBACK="Unknown (no git or not git repo)"
+ARG GIT_HASH=${GIT_FULLBACK}
+ARG GIT_TAG=${GIT_FULLBACK}
+ARG GIT_BRANCH=${GIT_FULLBACK}
 ENV TIKV_BUILD_GIT_HASH=${GIT_HASH}
 ENV TIKV_BUILD_GIT_TAG=${GIT_TAG}
 ENV TIKV_BUILD_GIT_BRANCH=${GIT_BRANCH}
@@ -94,11 +150,17 @@ RUN make build_dist_release
 
 # Export to a clean image
 FROM debian:bullseye-slim
+LABEL MAINTAINER Justin Zhang schnell18@gmail.com
 
-MAINTAINER Justin Zhang schnell18@gmail.com
 COPY --from=builder /tikv/target/release/tikv-server /tikv-server
 COPY --from=builder /tikv/target/release/tikv-ctl /tikv-ctl
 
 EXPOSE 20160 20180
+
+RUN apt-get install -y tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    apt-get remove -y tzdata && \
+    apt clean
 
 ENTRYPOINT ["/tikv-server"]

@@ -85,7 +85,7 @@ name = "failpoints"
 path = "tests/failpoints/mod.rs"
 required-features = ["failpoints"]
 
-[[bench]]
-name = "cdc_event"
-harness = false
-required-features = ["protobuf-codec"]
+# [[bench]]
+# name = "cdc_event"
+# harness = false
+# required-features = ["protobuf-codec"]
