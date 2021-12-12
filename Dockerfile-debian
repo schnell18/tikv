@@ -50,7 +50,7 @@ WORKDIR /tikv
 # Install the Rust toolchain
 RUN rustup self update \
   && rustup set profile minimal \
-  && rustup default stable
+  && rustup default nightly
 
 # For cargo
 COPY scripts ./scripts
